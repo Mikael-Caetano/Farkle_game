@@ -16,7 +16,7 @@ servers = db["servers"]
 global IP
 IP = get('https://api.ipify.org').text
 
-directory = os.getcwd() + '\\'
+directory = os.getcwd() + r'\Farkle_game\\'
 os.chdir(directory)
 sys.path.append(directory + r'\TkTreectrl')
 from TkTreectrl import *
