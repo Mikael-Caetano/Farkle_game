@@ -5,8 +5,7 @@ from tkinter import *
 from tkinter import messagebox
 from pymongo import MongoClient
 from PIL import Image, ImageTk
-sys.path.append(r'C:\Users\Pcyes\Desktop\programação\python\projetos\Farkle_game\TkTreectrl')
-from TkTreectrl import *
+from requests import get
 
 
 #Database
@@ -15,11 +14,12 @@ db = cluster["farkle"]
 servers = db["servers"]
 
 global IP
-IP = socket.gethostbyname(socket.gethostname())
+IP = get('https://api.ipify.org').text
 
-directory = os.getcwd() + r'\Farkle_game\\'
+directory = os.getcwd() + '\\'
 os.chdir(directory)
-
+sys.path.append(directory + r'\TkTreectrl')
+from TkTreectrl import *
 
 pygame.mixer.init()
 
@@ -490,41 +490,6 @@ def skip_to_win_frame():
     game.update_pontuations()
     game.pause_game()
 
-def create_server():
-    if room_name.get() != '':
-        name_exist = False
-        results = servers.find({"room_name": room_name.get()}) 
-        for result in results:
-            name_exist = result['room_name']
-        if name_exist == False:
-            raise_frame('wait')
-            waiting_player()
-            if first_player.get() == 1:
-                first_player_treated = 'Jogador 1'
-            elif first_player.get() == 2:
-                first_player_treated = 'Jogador 2'
-            elif first_player.get() == 3:
-                first_player_treated = 'Aleatório'
-            
-            if password_active.get():
-                password_active_treated = 'Sim'
-            else:
-                password_active_treated = 'Não'
-
-            new_server = {"ip": IP,
-            "room_name": room_name.get(),
-            "password_active": password_active_treated,
-            "password": password_value.get(),
-            "win_pontuation": win_pontuation.get(),
-            "first_player": first_player_treated}
-            servers.insert_one(new_server)
-
-
-        else:
-            messagebox.showerror(title='Não criada!', message='Já existe uma sala com esse nome.')
-    else:
-        messagebox.showerror(title='Não criada!', message='Não é possível criar uma sala sem nome')
-
 def enable_disable_password():
     if password_active.get():
         password.configure(state=NORMAL)
@@ -562,25 +527,62 @@ def servers_list_update():
     for server in servers.find():
         servers_list.insert(END, server['room_name'], server['win_pontuation'], server['first_player'], server['password_active'])
 
+def create_server():
+    if room_name.get() != '':
+        name_exist = False
+        results = servers.find({"room_name": room_name.get()}) 
+        for result in results:
+            name_exist = result['room_name']
+        if name_exist == False:
+            raise_frame('wait')
+            waiting_player()
+            if first_player.get() == 1:
+                first_player_treated = 'Jogador 1'
+            elif first_player.get() == 2:
+                first_player_treated = 'Jogador 2'
+            elif first_player.get() == 3:
+                first_player_treated = 'Aleatório'
+            
+            if password_active.get():
+                password_active_treated = 'Sim'
+            else:
+                password_active_treated = 'Não'
+
+            new_server = {"ip": IP,
+            "room_name": room_name.get(),
+            "password_active": password_active_treated,
+            "password": password_value.get(),
+            "win_pontuation": win_pontuation.get(),
+            "first_player": first_player_treated}
+            servers.insert_one(new_server)
+            
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.bind((IP, 5555)) 
+            s.listen(2)
+            while True:
+             conn, addr = s.accept()
+             game.start_game()
+
+        else:
+            messagebox.showerror(title='Não criada!', message='Já existe uma sala com esse nome.')
+    else:
+        messagebox.showerror(title='Não criada!', message='Não é possível criar uma sala sem nome')
+
 def connect_to_server():
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     selected_server = servers_list.get(servers_list.index(ACTIVE))
     selected_server_name = selected_server[0][0]
     server = servers.find_one({'room_name': selected_server_name})
     selected_server_ip = server['ip']
-    print(selected_server_ip)
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.bind((selected_server_ip, 5555)) 
-    s.listen()
+    
     s.connect((selected_server_ip, 5555))
-    conn, addr = s.accept()
-    game.start_game()
     
 
 #Window Configuration
 window = Tk()
 window.title("Farkle")
 window.resizable(0, 0)
-window.wm_iconbitmap(directory + 'logo.ico')
+window.wm_iconbitmap(directory + r'images\logo.ico')
 
 w = 1100
 h = 900
@@ -598,23 +600,23 @@ window.geometry('%dx%d+%d+%d' % (w, h, x, y))
 
 
 #Images creation
-background = PhotoImage(file = directory + 'darkwood_background.png')
+background = PhotoImage(file = directory + r'images\darkwood_background.png')
 
-die1_image2 = ImageTk.PhotoImage(Image.open(directory + r'\die1.png'))
-die2_image2 = ImageTk.PhotoImage(Image.open(directory + r'\die2.png'))
-die3_image2 = ImageTk.PhotoImage(Image.open(directory + r'\die3.png'))
-die4_image2 = ImageTk.PhotoImage(Image.open(directory + r'\die4.png'))
-die5_image2 = ImageTk.PhotoImage(Image.open(directory + r'\die5.png'))
-die6_image2 = ImageTk.PhotoImage(Image.open(directory + r'\die6.png'))
+die1_image2 = ImageTk.PhotoImage(Image.open(directory + r'images\die1.png'))
+die2_image2 = ImageTk.PhotoImage(Image.open(directory + r'images\die2.png'))
+die3_image2 = ImageTk.PhotoImage(Image.open(directory + r'images\die3.png'))
+die4_image2 = ImageTk.PhotoImage(Image.open(directory + r'images\die4.png'))
+die5_image2 = ImageTk.PhotoImage(Image.open(directory + r'images\die5.png'))
+die6_image2 = ImageTk.PhotoImage(Image.open(directory + r'images\die6.png'))
 
-skip_image = PhotoImage(file = directory + 'skip.png')
-pause_image = PhotoImage(file = directory + 'pause.png')
-play_image = PhotoImage(file = directory + 'play.png')
-info_image = PhotoImage(file = directory + 'info.png')
-refresh_image = PhotoImage(file = directory + 'refresh.png')
+skip_image = PhotoImage(file = directory + r'images\skip.png')
+pause_image = PhotoImage(file = directory + r'images\pause.png')
+play_image = PhotoImage(file = directory + r'images\play.png')
+info_image = PhotoImage(file = directory + r'images\info.png')
+refresh_image = PhotoImage(file = directory + r'images\refresh.png')
 
-bust_image = PhotoImage(file= directory + 'Bust.png')
-paused_game_image = PhotoImage(file= directory + 'paused.png')
+bust_image = PhotoImage(file= directory + r'images\Bust.png')
+paused_game_image = PhotoImage(file= directory + r'images\paused.png')
 
 #Sounds creation
 bust_sound = pygame.mixer.Sound(file= directory + r'soundtrack\sound_effects\bust_sound.wav')
