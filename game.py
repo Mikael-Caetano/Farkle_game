@@ -159,7 +159,7 @@ class Game:
         self.bust()
         self.update_pontuations()
         self.add_buttons()
-        raise_frame(frames['3'])
+        raise_frame('3')
         window.after(1000, self.count_time)
         window.after(1000, self.decrease_countdown)
 
@@ -437,11 +437,11 @@ class Game:
             player1_bust_times.set(str(self.player1_bust_counter))
             player2_bust_times.set(str(self.player2_bust_counter))
             self.pause_game()
-            raise_frame(frames['4'])
+            raise_frame('4')
 
     def restart_game(self):
         game.reset_countdown()
-        raise_frame(frames['1'])
+        raise_frame('1')
         paused_label.place_forget()
         game.__init__()
 
@@ -465,8 +465,25 @@ class Game:
 
 #OTher functions  
 def raise_frame(frame):
-    frame.tkraise()
-
+    global actual_frame
+    actual_frame = frame
+    frames[frame].tkraise()
+    
+def instructions_raise_return():
+    global last_frame
+    global first_time
+    if first_time:
+        raise_frame('1')
+        first_time = False
+        welcome_label.place_forget()
+        rules_label.configure(font='Times 11 bold')
+        rules_label.place(x=140, y=40)
+    elif actual_frame in ('1', '2', '3', '4', 'wait'):
+        last_frame = actual_frame
+        raise_frame('0')
+    elif actual_frame == '0':
+        raise_frame(last_frame)
+    
 def skip_to_win_frame():
     game.win_pontuation = 3000
     game.player1_pontuation = 4000
@@ -480,6 +497,7 @@ def create_server():
         for result in results:
             name_exist = result['room_name']
         if name_exist == False:
+            raise_frame('wait')
             waiting_player()
             if first_player.get() == 1:
                 first_player_treated = 'Jogador 1'
@@ -532,7 +550,6 @@ def password_treatement(password_value):
     password_value.set(alphanumeric[:8])
 
 def waiting_player():
-    raise_frame(frames['wait'])
     texts = ('Esperando pelo segundo jogador.  ', 'Esperando pelo segundo jogador.. ', 'Esperando pelo segundo jogador...')
     index = texts.index(waiting_player_text.get()) + 1
     if index > 2:
@@ -617,13 +634,15 @@ for index, frame in enumerate(frames_names):
     frames[frame].grid(row=0, column=0, sticky='news')
     Label(frames[frame], image=background).place(x=0, y=0)
 
-raise_frame(frames['0'])
+raise_frame('0')
 
 #Variables
 first_player, win_pontuation, countdown, countdown_text, actual_player = IntVar(window, 1), IntVar(window, 4000), IntVar(window, 15), StringVar(window, '15'), StringVar(window)
 player1_pontuation, player2_pontuation, player1_turn_pontuation, player2_turn_pontuation, player1_selected_pontuation, player2_selected_pontuation = StringVar(window), StringVar(window), StringVar(window), StringVar(window), StringVar(window), StringVar(window)
 winner, game_time, player1_time, player2_time, loser_pontuation, bust_times, player1_bust_times, player2_bust_times, turn_count  = StringVar(window), StringVar(window), StringVar(window), StringVar(window), StringVar(window), StringVar(window), StringVar(window), StringVar(window), StringVar(window)
 room_name, password_active, password_value, waiting_player_text = StringVar(window), BooleanVar(window, False), StringVar(window), StringVar(window, 'Esperando pelo segundo jogador...')
+
+first_time = True
 
 game_rules = '''Regras do jogo:\n
 Farkle é jogado por dois jogadores, com cada jogador em sucessão tendo um turno em que joga os dados.\nPor sua vez a rolagem resulta em uma pontuação para cada jogador, que se acumulam até uma pontuação de vitória.\n
@@ -674,14 +693,16 @@ win_frame_titles_x = 240
 
 
 #Frame 0 - Instructions
-Label(frames['0'], text='Seja bem-vindo à Farkle!', bg=labes_background_color, fg=labels_text_color, font=titles_font, width=38).place(x=3, y=3)
-Label(frames['0'], text= game_rules, bg=labes_background_color, fg=labels_text_color, font='Times 11 bold').place(x=140, y=80)
+welcome_label = Label(frames['0'], text='Seja bem-vindo à Farkle!', bg=labes_background_color, fg=labels_text_color, font=titles_font, width=38)
+welcome_label.place(x=3, y=3)
 
-Button(frames['0'], width=10, height=2, font='Times 16 bold', text="Entendido!", fg='black', bg='gold2', command= lambda: raise_frame(frames['1'])).place(x=490, y=825)
+rules_label = Label(frames['0'], text= game_rules, bg=labes_background_color, fg=labels_text_color, font='Times 11 bold')
+rules_label.place(x=140, y=80)
+
+Button(frames['0'], width=10, height=2, font='Times 16 bold', text="Entendido!", fg='black', bg='gold2', command=instructions_raise_return).place(x=490, y=825)
 
 pause_play_button0 = Button(frames['0'], bg='white', image=pause_image, command=players_music.pause_play_music)
 pause_play_button0.place(x=1040, y=870)
-
 
 
 #Frame 1 - Servers List
@@ -693,13 +714,12 @@ servers_list.place(x=100, y=100)
 servers_list_update()
 
 
-Button(frames['1'], width=10, height=2, font='Times 16 bold', text="Criar Partida", fg='black', bg='gold2', command=lambda: raise_frame(frames['2'])).place(x=400, y=825)
+Button(frames['1'], width=10, height=2, font='Times 16 bold', text="Criar Partida", fg='black', bg='gold2', command=lambda: raise_frame('2')).place(x=400, y=825)
 Button(frames['1'], width=10, height=2, font='Times 16 bold', text="Entrar", fg='black', bg='gold2', command=connect_to_server).place(x=550, y=825)
 Button(frames['1'], image=refresh_image, command=servers_list_update).place(x=1020, y=100)
 
 pause_play_button1 = Button(frames['1'], bg='white', image=pause_image, command=players_music.pause_play_music)
 pause_play_button1.place(x=1040, y=870)
-
 
 
 #Frame 2 - Create server
@@ -730,8 +750,6 @@ Button(frames['2'], width=15, height=2, font='Times 16 bold', text="Criar sala",
 
 pause_play_button2 = Button(frames['2'], bg='white', image=pause_image, command=players_music.pause_play_music)
 pause_play_button2.place(x=1040, y=870)
-
-
 
 #Awaiting for second player
 Label(frames['wait'], textvariable=waiting_player_text, bg=labes_background_color, fg=labels_text_color, font='Times 40 bold').place(x=170, y=360)
@@ -811,6 +829,8 @@ pause_play_button4.place(x=1040, y=870)
 
 for frame in frames:
     Button(frames[frame], width=20, height=20, bg='white', image=skip_image, command=players_music.skip_music).place(x=1070, y=870)
+    if frame not in ('0', '4'):
+        Button(frames[frame], bg='white', image=info_image, command=instructions_raise_return).place(x=1010, y=870)
 
 #Keybindings
 keybindings = {'<q>': game.end_turn, '<f>': game.roll_dice, '<Escape>': game.pause_game, '<p>': game.pause_game}
