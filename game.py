@@ -1,23 +1,52 @@
 import os
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
-import random, pygame, datetime, socket, sys
+import random, pygame, dns, datetime, socket, sys, upnpy
 from tkinter import *
 from tkinter import messagebox
 from pymongo import MongoClient
 from PIL import Image, ImageTk
 from requests import get
 
-
 #Database
 cluster = MongoClient("mongodb+srv://admin:v3CBjmlGg0xVkKW1@farkle-mgfna.gcp.mongodb.net/test?retryWrites=true&w=majority")
 db = cluster["farkle"]
 servers = db["servers"]
 
+#Get IP and configure router
 global IP
-IP = get('https://api.ipify.org').text
+global port
+global local_ip
 
+local_ip = socket.gethostbyname(socket.gethostname())
+IP = get('https://api.ipify.org').text
+port = 5555
+
+upnp = upnpy.UPnP()
+upnp.discover(4)
+
+device = upnp.get_igd()
+print(device.get_services())
+
+service = device['WANIPConn1']
+service.get_actions()
+service.AddPortMapping.get_input_arguments()
+service.AddPortMapping(
+    NewRemoteHost='farkle',
+    NewExternalPort=port,
+    NewProtocol='TCP',
+    NewInternalPort=port,
+    NewInternalClient=local_ip,
+    NewEnabled=1,
+    NewPortMappingDescription='Farkle server port',
+    NewLeaseDuration=0
+)
+
+
+#Directory
 directory = os.getcwd() + r'\Farkle_game\\'
 os.chdir(directory)
+
+#Import Tktreectrl
 sys.path.append(directory + r'\TkTreectrl')
 from TkTreectrl import *
 
@@ -27,17 +56,17 @@ class Music:
     def __init__(self, player):
         global path
         global soundtracks
-        path = directory + r'\soundtrack\\'
+        path = directory + r'soundtrack\\'
         soundtracks = ['A winter tale.mp3' , 'Around the fire.mp3', 'Cloak and Dagger.mp3', 'Drink up.mp3', 'Evening in the tavern.mp3', 'Merchants of novigrad.mp3', 'Tavern theme 1.mp3',
         'Tavern theme 2.mp3', 'Tavern theme 3.mp3', 'Tavern theme 4.mp3', 'The bannered mare.mp3', 'The nightingale.mp3' ]
         random.shuffle(soundtracks)
         self.x = 0
         self.skip = False
         self.playing = True
-        pygame.mixer.music.load(path + soundtracks[self.x])
-        pygame.mixer.music.set_volume(0.4)
-        pygame.mixer.music.play(0)
-        self.queue()
+        # pygame.mixer.music.load(path + soundtracks[self.x])
+        # pygame.mixer.music.set_volume(0.4)
+        # pygame.mixer.music.play(0)
+        # self.queue()
         
     def queue(self):
         pos = pygame.mixer.music.get_pos()
@@ -469,7 +498,7 @@ def raise_frame(frame):
     actual_frame = frame
     frames[frame].tkraise()
     
-def instructions_raise_return():
+def toggle_instructions():
     global last_frame
     global first_time
     if first_time:
@@ -556,12 +585,27 @@ def create_server():
             "first_player": first_player_treated}
             servers.insert_one(new_server)
             
+            global s
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.bind((IP, 5555)) 
-            s.listen(2)
+            s.bind(('', port)) 
+            s.listen(1)
             while True:
-             conn, addr = s.accept()
-             game.start_game()
+                conn, addr = s.accept()
+                game.start_game()
+                while True:
+                    global variables
+                    if actual_player == 1:
+                        variables = [game.player1_pontuation, game.player1_selected_pontuation, game.player1_turn_pontuation,
+                        game.actual_player, game.win]
+                        data = str(variables)
+                        s.send(data.encode())
+
+                    if actual_player == 2:
+                        data = s.recv(1024)
+                        data = data.decode('utf-8')
+                        data = eval(data)
+                        for index, variable in enumerate(variables):
+                            variable = data[index]
 
         else:
             messagebox.showerror(title='Não criada!', message='Já existe uma sala com esse nome.')
@@ -569,15 +613,31 @@ def create_server():
         messagebox.showerror(title='Não criada!', message='Não é possível criar uma sala sem nome')
 
 def connect_to_server():
+    global s
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     selected_server = servers_list.get(servers_list.index(ACTIVE))
     selected_server_name = selected_server[0][0]
     server = servers.find_one({'room_name': selected_server_name})
     selected_server_ip = server['ip']
     
-    s.connect((selected_server_ip, 5555))
-    
+    s.connect((selected_server_ip, port))
+    game.start_game()
+    while True:
+        global variables
+        if actual_player == 1:
+            data = s.recv(1024)
+            data = data.decode('utf-8')
+            data = eval(data)
+            for index, variable in enumerate(variables):
+                variable = data[index]
 
+        if actual_player == 2:
+            variables = [game.player2_pontuation, game.player2_selected_pontuation, game.player2_turn_pontuation,
+            game.actual_player, game.win]
+            data = str(variables)
+            s.send(data.encode())
+
+    
 #Window Configuration
 window = Tk()
 window.title("Farkle")
@@ -597,7 +657,6 @@ y = (hs/2) - (h/2)
 # set the dimensions of the screen 
 # and where it is placed
 window.geometry('%dx%d+%d+%d' % (w, h, x, y))
-
 
 #Images creation
 background = PhotoImage(file = directory + r'images\darkwood_background.png')
@@ -646,17 +705,49 @@ room_name, password_active, password_value, waiting_player_text = StringVar(wind
 
 first_time = True
 
-game_rules = '''Regras do jogo:\n
-Farkle é jogado por dois jogadores, com cada jogador em sucessão tendo um turno em que joga os dados.\nPor sua vez a rolagem resulta em uma pontuação para cada jogador, que se acumulam até uma pontuação de vitória.\n
-No início de cada turno, o jogador joga todos os seis dados ao mesmo tempo.\n
-Depois de cada lance, um ou mais dados de pontuação devem ser retirados (ver regras de pontuação abaixo).\n
-O jogador pode, então, terminar o seu turno e guardar a pontuação acumulada até agora,\nou continuar a jogar os dados restantes (aqueles que não foram retirados).\n
-Se o jogador retirou todos os seis dados, ele pode continuar a sua vez com um novo lance de todos os seis dados,\n aumentando a pontuação que ele já acumulou. Não há limite para o número de vezes que um jogador pode rolar em um turno.\n
-Se nenhum dos dados valer pontos em algum lance, o jogador teve um "Bust!" e todos\nos pontos que ele havia acumulado no turno são perdidos, os pontos dos turnos anteriores permancem sem alteração.\n
-No final do turno do jogador, os dados são passados para o próximo jogador, e ele tem sua vez.\n
-Uma vez que um jogador alcançou ou ultrapassou a pontuação de vitória, ele vence.\n\n
-Pontuação:\n\ncada 1 - 100\n\ncada 5 - 50\n\nTrês 1s - 1000 e + 1000 a cada 1 adicional\n\nTrês 2s - 200 e + 200 a cada 2 adicional\n\nTrês 3s - 300 e + 300 a cada 3 adicional\n
-Três 4s - 400 e + 400 a cada 4 adicional\n\nTrês 5s - 500 e + 500 a cada 5 adicional\n\nTrês 6s - 600 e + 600 a cada 6 adicional\n\nSequência de 1 à 6 - 1200\n'''
+game_rules = '''Regras do jogo:
+
+Farkle é jogado por dois jogadores, com cada jogador em sucessão tendo um turno em que joga os dados.
+Por sua vez a rolagem resulta em uma pontuação para cada jogador, que se acumulam até uma pontuação de vitória.
+
+No início de cada turno, o jogador joga todos os seis dados ao mesmo tempo.
+
+Depois de cada lance, um ou mais dados de pontuação devem ser retirados (ver regras de pontuação abaixo).
+
+O jogador pode, então, terminar o seu turno e guardar a pontuação acumulada até agora,
+ou continuar a jogar os dados restantes (aqueles que não foram retirados).
+
+Se o jogador retirou todos os seis dados, ele pode continuar a sua vez com um novo lance de todos os seis dados,
+aumentando a pontuação que ele já acumulou. Não há limite para o número de vezes que um jogador pode rolar em um turno.
+
+Se nenhum dos dados valer pontos em algum lance, o jogador teve um "Bust!" e todos
+os pontos que ele havia acumulado no turno são perdidos, os pontos dos turnos anteriores permancem sem alteração.
+
+No final do turno do jogador, os dados são passados para o próximo jogador, e ele tem sua vez.
+
+Uma vez que um jogador alcançou ou ultrapassou a pontuação de vitória, ele vence.
+
+
+Pontuação:
+
+cada 1 - 100
+
+cada 5 - 50
+
+Três 1s - 1000 e + 1000 a cada 1 adicional
+
+Três 2s - 200 e + 200 a cada 2 adicional
+
+Três 3s - 300 e + 300 a cada 3 adicional
+
+Três 4s - 400 e + 400 a cada 4 adicional
+
+Três 5s - 500 e + 500 a cada 5 adicional
+
+Três 6s - 600 e + 600 a cada 6 adicional
+
+Sequência de 1 à 6 - 1200
+'''
 
 #Instance Creating
 die1 = Die(1)
@@ -668,6 +759,7 @@ die6 = Die(6)
 game = Game()
 
 players_music = Music(0)
+
 
 #Interface Parameters
 titles_background_color = 'saddle brown'
@@ -701,7 +793,7 @@ welcome_label.place(x=3, y=3)
 rules_label = Label(frames['0'], text= game_rules, bg=labes_background_color, fg=labels_text_color, font='Times 11 bold')
 rules_label.place(x=140, y=80)
 
-Button(frames['0'], width=10, height=2, font='Times 16 bold', text="Entendido!", fg='black', bg='gold2', command=instructions_raise_return).place(x=490, y=825)
+Button(frames['0'], width=10, height=2, font='Times 16 bold', text="Entendido!", fg='black', bg='gold2', command=toggle_instructions).place(x=490, y=825)
 
 pause_play_button0 = Button(frames['0'], bg='white', image=pause_image, command=players_music.pause_play_music)
 pause_play_button0.place(x=1040, y=870)
@@ -832,7 +924,7 @@ pause_play_button4.place(x=1040, y=870)
 for frame in frames:
     Button(frames[frame], width=20, height=20, bg='white', image=skip_image, command=players_music.skip_music).place(x=1070, y=870)
     if frame not in ('0', '4'):
-        Button(frames[frame], bg='white', image=info_image, command=instructions_raise_return).place(x=1010, y=870)
+        Button(frames[frame], bg='white', image=info_image, command=toggle_instructions).place(x=1010, y=870)
 
 #Keybindings
 keybindings = {'<q>': game.end_turn, '<f>': game.roll_dice, '<Escape>': game.pause_game, '<p>': game.pause_game}
